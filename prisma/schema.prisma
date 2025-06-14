@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Contest {
+  id           Int           @id @default(autoincrement())
+  name         String
+  startDate    DateTime
+  endDate      DateTime
+  participants Participant[] // List of participants in this contest
+  votes        Vote[]        // List of votes for participants in this contest
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Participant {
+  codeName       String      @id // Unique identifier, e.g., CW001
+  fullName       String
+  email          String      @unique
+  about          String
+  photo          String?     // Stores Cloudinary image URL
+  contestId      Int         // Foreign key to Contest, required
+  contest        Contest     @relation(fields: [contestId], references: [id], onDelete: Cascade) // Participant deleted if Contest is deleted
+  votes          Vote[]      // Votes for this participant
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model Vote {
+  id                 Int         @id @default(autoincrement())
+  contestId          Int
+  participantCodeName String      // References Participant.codeName
+  voteCount          Int
+  voterName          String
+  paymentReference   String?     @unique
+  contest            Contest     @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  participant        Participant @relation(fields: [participantCodeName], references: [codeName], onDelete: Cascade)
+  createdAt          DateTime    @default(now())
+}
