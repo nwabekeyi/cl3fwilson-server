@@ -27,9 +27,11 @@ model Participant {
   contestId      Int         // Foreign key to Contest, required
   contest        Contest     @relation(fields: [contestId], references: [id], onDelete: Cascade) // Participant deleted if Contest is deleted
   votes          Vote[]      // Votes for this participant
+  evicted        Boolean     @default(false) // ✅ New field
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 }
+
 
 model Vote {
   id                 Int         @id @default(autoincrement())

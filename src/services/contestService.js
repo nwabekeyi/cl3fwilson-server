@@ -1,6 +1,7 @@
 // src/services/contestService.js
 import prisma from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { deleteImageByUrl } from '../config/cloudinary.js';
 
 // Create a new contest
 export const createContest = async (data) => {
@@ -33,8 +34,22 @@ export const getParticipantsByContest = async (contestId) => {
   }
   return prisma.participant.findMany({
     where: { contestId: parseInt(contestId) },
-    orderBy: { createdAt: 'desc' },
-    include: { votes: true },
+    orderBy: [
+      { evicted: 'asc' }, // Non-evicted (false) first, evicted (true) last
+      { createdAt: 'desc' },
+    ],
+    select: {
+      codeName: true,
+      fullName: true,
+      email: true,
+      about: true,
+      photo: true,
+      contestId: true,
+      evicted: true, // Explicitly include evicted field
+      createdAt: true,
+      updatedAt: true,
+      votes: true, // Include related votes
+    },
   });
 };
 
@@ -69,6 +84,7 @@ export const createParticipant = async (contestId, participantData) => {
         email: participantData.email,
         about: participantData.about,
         photo: participantData.photo || null,
+        evicted: false, // Explicitly set to ensure default value
       },
     });
   } catch (error) {
@@ -121,6 +137,25 @@ export const deleteContest = async (contestId) => {
   if (!contestId || isNaN(parseInt(contestId))) {
     throw new Error('Valid contestId is required');
   }
+
+  // Fetch participants with photos to delete from Cloudinary
+  const participants = await prisma.participant.findMany({
+    where: { contestId: parseInt(contestId) },
+    select: { photo: true },
+  });
+
+  // Delete images from Cloudinary
+  for (const participant of participants) {
+    if (participant.photo) {
+      try {
+        await deleteImageByUrl(participant.photo);
+      } catch (error) {
+        console.warn(`Failed to delete image from Cloudinary for participant: ${error.message}`);
+      }
+    }
+  }
+
+  // Delete votes, participants, and contest in a transaction
   await prisma.$transaction([
     prisma.vote.deleteMany({ where: { contestId: parseInt(contestId) } }),
     prisma.participant.deleteMany({ where: { contestId: parseInt(contestId) } }),
@@ -133,6 +168,28 @@ export const updateParticipant = async (codeName, participantData) => {
   if (!codeName) {
     throw new Error('codeName is required');
   }
+
+  // Get current participant to check if photo exists
+  const existingParticipant = await prisma.participant.findUnique({
+    where: { codeName },
+    select: { photo: true },
+  });
+
+  if (!existingParticipant) {
+    throw new Error('Participant not found');
+  }
+
+  // If new photo is provided and it's different from the existing one, delete the old one
+  if (participantData.photo && participantData.photo !== existingParticipant.photo) {
+    if (existingParticipant.photo) {
+      try {
+        await deleteImageByUrl(existingParticipant.photo);
+      } catch (error) {
+        console.warn(`Failed to delete previous image from Cloudinary: ${error.message}`);
+      }
+    }
+  }
+
   const dataToUpdate = {
     fullName: participantData.fullName || undefined,
     email: participantData.email || undefined,
@@ -158,13 +215,56 @@ export const deleteParticipant = async (codeName) => {
   if (!codeName) {
     throw new Error('codeName is required');
   }
+
+  // Fetch participant first to get the photo URL
+  const participant = await prisma.participant.findUnique({
+    where: { codeName },
+    select: { photo: true },
+  });
+
+  if (!participant) {
+    throw new Error('Participant not found');
+  }
+
+  // Attempt to delete image from Cloudinary (if photo URL exists)
+  if (participant.photo) {
+    try {
+      await deleteImageByUrl(participant.photo);
+    } catch (error) {
+      console.warn(`Failed to delete image from Cloudinary: ${error.message}`);
+    }
+  }
+
+  // Delete votes and participant record
   await prisma.$transaction([
     prisma.vote.deleteMany({ where: { participantCodeName: codeName } }),
     prisma.participant.delete({ where: { codeName } }),
   ]);
 };
 
+// Evict a participant
+export const evictParticipant = async (codeName) => {
+  if (!codeName) {
+    throw new Error('codeName is required');
+  }
 
+  const participant = await prisma.participant.findUnique({
+    where: { codeName },
+  });
+
+  if (!participant) {
+    throw new Error('Participant not found');
+  }
+
+  if (participant.evicted) {
+    throw new Error('Participant is already evicted');
+  }
+
+  return prisma.participant.update({
+    where: { codeName },
+    data: { evicted: true },
+  });
+};
 
 // Create votes for a participant
 export const createVotes = async (
@@ -186,6 +286,21 @@ export const createVotes = async (
   if (!voterName) {
     throw new Error('voterName is required');
   }
+
+  // Check if participant is evicted
+  const participant = await prisma.participant.findUnique({
+    where: { codeName: participantCodeName },
+    select: { evicted: true },
+  });
+
+  if (!participant) {
+    throw new Error('Participant not found');
+  }
+
+  if (participant.evicted) {
+    throw new Error('Cannot vote for an evicted participant');
+  }
+
   try {
     return await prisma.vote.create({
       data: {
@@ -204,8 +319,6 @@ export const createVotes = async (
   }
 };
 
-// ... (other functions unchanged)
-
 // Add votes by admin with generated paymentReference
 export const addAdminVotes = async (contestId, participantCodeName, voteCount, voterName = 'Admin') => {
   if (!contestId || isNaN(parseInt(contestId))) {
@@ -222,7 +335,7 @@ export const addAdminVotes = async (contestId, participantCodeName, voteCount, v
   }
 
   // Generate a unique paymentReference
-  const paymentReference =`VOTE_${uuidv4()}`;
+  const paymentReference = `VOTE_${uuidv4()}`;
 
   // Verify contest and participant exist
   const contest = await findContest(contestId);
@@ -232,6 +345,11 @@ export const addAdminVotes = async (contestId, participantCodeName, voteCount, v
   const participant = await findParticipant(participantCodeName);
   if (!participant) {
     throw new Error('Participant not found');
+  }
+
+  // Check if participant is evicted
+  if (participant.evicted) {
+    throw new Error('Cannot vote for an evicted participant');
   }
 
   return createVotes(contestId, participantCodeName, voteCount, voterName, paymentReference);
@@ -250,5 +368,6 @@ export const getContestResults = async (contestId) => {
     participantCodeName: participant.codeName,
     name: participant.fullName,
     voteCount: participant.votes.reduce((sum, vote) => sum + vote.voteCount, 0),
+    evicted: participant.evicted,
   }));
 };

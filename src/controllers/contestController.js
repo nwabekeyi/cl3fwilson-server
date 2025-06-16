@@ -13,6 +13,7 @@ import {
   getAllContests,
   getParticipantsByContest,
   addAdminVotes,
+  evictParticipant, // Added import for evictParticipant
 } from '../services/contestService.js';
 import { uploadImage } from '../config/cloudinary.js';
 
@@ -166,13 +167,30 @@ export const deleteParticipantHandler = async (req, res) => {
     const { codeName } = req.params;
     const participant = await findParticipant(codeName);
     if (!participant) {
-      return new Error('Participant not found');
+      return res.status(404).json({ error: 'Participant not found' });
     }
     await deleteParticipant(codeName);
     res.status(204).send();
   } catch (error) {
     console.error('Delete participant error:', { message: error.message, code: error.code });
-    res.status(500).json({ error: 'Failed to delete participant' });
+    res.status(500).json({ error: error.message || 'Failed to delete participant' });
+  }
+};
+
+// Evict participant handler
+export const evictParticipantHandler = async (req, res) => {
+  console.log('called')
+  try {
+    const { codeName } = req.params;
+    const participant = await findParticipant(codeName);
+    if (!participant) {
+      return res.status(404).json({ error: 'Participant not found' });
+    }
+    const evictedParticipant = await evictParticipant(codeName);
+    res.status(200).json(evictedParticipant);
+  } catch (error) {
+    console.error('Evict participant error:', { message: error.message, code: error.code });
+    res.status(500).json({ error: error.message || 'Failed to evict participant' });
   }
 };
 

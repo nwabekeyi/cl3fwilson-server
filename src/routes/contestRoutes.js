@@ -12,6 +12,7 @@ import {
   getParticipantsByContestHandler,
   addAdminVotesHandler,
   saveVoteHandler,
+  evictParticipantHandler, // Added import for evictParticipantHandler
 } from '../controllers/contestController.js';
 import { validateContest, validateParticipant, validateVote } from '../middlewares/validateRequest.js';
 import { upload } from '../config/multer.js';
@@ -37,6 +38,7 @@ router.put(
   updateParticipantHandler
 );
 router.delete('/contests/participants/:codeName', deleteParticipantHandler);
+router.patch('/contests/participants/evict/:codeName', evictParticipantHandler); // Added new route for eviction
 
 router.post('/contests/:contestId/votes', validateVote, saveVoteHandler);
 router.post('/contests/:contestId/participants/:participantCodeName/votes', addAdminVotesHandler);
