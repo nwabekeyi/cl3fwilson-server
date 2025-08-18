@@ -19,6 +19,7 @@ import { upload } from '../config/multer.js';
 
 const router = Router();
 
+
 router.get('/contests', getAllContestsHandler);
 router.post('/contests', validateContest, createContestHandler);
 router.put('/contests/:contestId', validateContest, updateContestHandler);
