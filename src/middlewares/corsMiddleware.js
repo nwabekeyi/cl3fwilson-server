@@ -3,7 +3,7 @@ import cors from 'cors';
 
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://cl3fwilson.com'
+  'https://cl3fwilsonstudio.com'
 ];
 
 const corsOptions = {

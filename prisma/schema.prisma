@@ -3,44 +3,44 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model Contest {
-  id           Int           @id @default(autoincrement())
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
   name         String
   startDate    DateTime
   endDate      DateTime
-  participants Participant[] // List of participants in this contest
-  votes        Vote[]        // List of votes for participants in this contest
+  participants Participant[] // Relation handled via ContestId in Participant
+  votes        Vote[]        // Relation handled via ContestId in Vote
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
 
 model Participant {
-  codeName       String      @id // Unique identifier, e.g., CW001
-  fullName       String
-  email          String      @unique
-  about          String
-  photo          String?     // Stores Cloudinary image URL
-  contestId      Int         // Foreign key to Contest, required
-  contest        Contest     @relation(fields: [contestId], references: [id], onDelete: Cascade) // Participant deleted if Contest is deleted
-  votes          Vote[]      // Votes for this participant
-  evicted        Boolean     @default(false) // ✅ New field
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  codeName      String     @unique // Unique identifier, e.g., CW001
+  fullName      String
+  email         String     @unique
+  about         String
+  photo         String?    // Stores Cloudinary image URL
+  contestId     String     @db.ObjectId
+  contest       Contest    @relation(fields: [contestId], references: [id])
+  votes         Vote[]     // Votes for this participant
+  evicted       Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 }
 
-
 model Vote {
-  id                 Int         @id @default(autoincrement())
-  contestId          Int
-  participantCodeName String      // References Participant.codeName
-  voteCount          Int
-  voterName          String
-  paymentReference   String?     @unique
-  contest            Contest     @relation(fields: [contestId], references: [id], onDelete: Cascade)
-  participant        Participant @relation(fields: [participantCodeName], references: [codeName], onDelete: Cascade)
-  createdAt          DateTime    @default(now())
+  id                  String       @id @default(auto()) @map("_id") @db.ObjectId
+  contestId           String       @db.ObjectId
+  participantId       String       @db.ObjectId
+  voteCount           Int
+  voterName           String
+  paymentReference    String?      @unique
+  contest             Contest      @relation(fields: [contestId], references: [id])
+  participant         Participant  @relation(fields: [participantId], references: [id])
+  createdAt           DateTime     @default(now())
 }
