@@ -2,6 +2,16 @@
 import prisma from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteImageByUrl } from '../config/cloudinary.js';
+import { ObjectId } from 'mongodb';
+
+// Validate MongoDB ObjectId
+const isValidObjectId = (id) => {
+  try {
+    return ObjectId.isValid(id) && new ObjectId(id).toString() === id;
+  } catch {
+    return false;
+  }
+};
 
 // Create a new contest
 export const createContest = async (data) => {
@@ -29,11 +39,11 @@ export const getAllContests = async () => {
 
 // Get all participants by contest ID
 export const getParticipantsByContest = async (contestId) => {
-  if (!contestId || isNaN(parseInt(contestId))) {
+  if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
   return prisma.participant.findMany({
-    where: { contestId: parseInt(contestId) },
+    where: { contestId }, // contestId is already a string (ObjectId)
     orderBy: [
       { evicted: 'asc' }, // Non-evicted (false) first, evicted (true) last
       { createdAt: 'desc' },
@@ -45,17 +55,17 @@ export const getParticipantsByContest = async (contestId) => {
       about: true,
       photo: true,
       contestId: true,
-      evicted: true, // Explicitly include evicted field
+      evicted: true,
       createdAt: true,
       updatedAt: true,
-      votes: true, // Include related votes
+      votes: true,
     },
   });
 };
 
 // Create a new participant with a custom codeName
 export const createParticipant = async (contestId, participantData) => {
-  if (!contestId || isNaN(parseInt(contestId))) {
+  if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
   if (!participantData.fullName || !participantData.email || !participantData.about) {
@@ -63,7 +73,7 @@ export const createParticipant = async (contestId, participantData) => {
   }
 
   const lastParticipant = await prisma.participant.findFirst({
-    where: { contestId: parseInt(contestId) },
+    where: { contestId },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -79,12 +89,12 @@ export const createParticipant = async (contestId, participantData) => {
     return await prisma.participant.create({
       data: {
         codeName: newCodeName,
-        contestId: parseInt(contestId),
+        contestId, // Store as string (ObjectId)
         fullName: participantData.fullName,
         email: participantData.email,
         about: participantData.about,
         photo: participantData.photo || null,
-        evicted: false, // Explicitly set to ensure default value
+        evicted: false,
       },
     });
   } catch (error) {
@@ -97,10 +107,10 @@ export const createParticipant = async (contestId, participantData) => {
 
 // Find a contest by ID
 export const findContest = async (contestId) => {
-  if (!contestId || isNaN(parseInt(contestId))) {
+  if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
-  return prisma.contest.findUnique({ where: { id: parseInt(contestId) } });
+  return prisma.contest.findUnique({ where: { id: contestId } });
 };
 
 // Find a participant by codeName
@@ -116,14 +126,14 @@ export const findParticipant = async (codeName) => {
 
 // Update a contest
 export const updateContest = async (contestId, data) => {
-  if (!contestId || isNaN(parseInt(contestId))) {
+  if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
   if (data.startDate && data.endDate && new Date(data.startDate) >= new Date(data.endDate)) {
     throw new Error('End date must be after start date');
   }
   return prisma.contest.update({
-    where: { id: parseInt(contestId) },
+    where: { id: contestId },
     data: {
       name: data.name || undefined,
       startDate: data.startDate ? new Date(data.startDate) : undefined,
@@ -134,13 +144,13 @@ export const updateContest = async (contestId, data) => {
 
 // Delete a contest
 export const deleteContest = async (contestId) => {
-  if (!contestId || isNaN(parseInt(contestId))) {
+  if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
 
   // Fetch participants with photos to delete from Cloudinary
   const participants = await prisma.participant.findMany({
-    where: { contestId: parseInt(contestId) },
+    where: { contestId },
     select: { photo: true },
   });
 
@@ -157,9 +167,9 @@ export const deleteContest = async (contestId) => {
 
   // Delete votes, participants, and contest in a transaction
   await prisma.$transaction([
-    prisma.vote.deleteMany({ where: { contestId: parseInt(contestId) } }),
-    prisma.participant.deleteMany({ where: { contestId: parseInt(contestId) } }),
-    prisma.contest.delete({ where: { id: parseInt(contestId) } }),
+    prisma.vote.deleteMany({ where: { contestId } }),
+    prisma.participant.deleteMany({ where: { contestId } }),
+    prisma.contest.delete({ where: { id: contestId } }),
   ]);
 };
 
@@ -219,7 +229,7 @@ export const deleteParticipant = async (codeName) => {
   // Fetch participant first to get the photo URL
   const participant = await prisma.participant.findUnique({
     where: { codeName },
-    select: { photo: true },
+    select: { photo: true, id: true }, // Include id for vote deletion
   });
 
   if (!participant) {
@@ -237,7 +247,7 @@ export const deleteParticipant = async (codeName) => {
 
   // Delete votes and participant record
   await prisma.$transaction([
-    prisma.vote.deleteMany({ where: { participantCodeName: codeName } }),
+    prisma.vote.deleteMany({ where: { participantId: participant.id } }),
     prisma.participant.delete({ where: { codeName } }),
   ]);
 };
@@ -274,7 +284,7 @@ export const createVotes = async (
   voterName,
   paymentReference
 ) => {
-  if (!contestId || isNaN(parseInt(contestId))) {
+  if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
   if (!participantCodeName) {
@@ -290,7 +300,7 @@ export const createVotes = async (
   // Check if participant is evicted
   const participant = await prisma.participant.findUnique({
     where: { codeName: participantCodeName },
-    select: { evicted: true },
+    select: { id: true, evicted: true },
   });
 
   if (!participant) {
@@ -304,8 +314,8 @@ export const createVotes = async (
   try {
     return await prisma.vote.create({
       data: {
-        contestId: parseInt(contestId),
-        participantCodeName,
+        contestId,
+        participantId: participant.id, // Use participantId from schema
         voterName,
         voteCount,
         paymentReference: paymentReference || null,
@@ -321,7 +331,7 @@ export const createVotes = async (
 
 // Add votes by admin with generated paymentReference
 export const addAdminVotes = async (contestId, participantCodeName, voteCount, voterName = 'Admin') => {
-  if (!contestId || isNaN(parseInt(contestId))) {
+  if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
   if (!participantCodeName) {
@@ -357,11 +367,11 @@ export const addAdminVotes = async (contestId, participantCodeName, voteCount, v
 
 // Get contest results
 export const getContestResults = async (contestId) => {
-  if (!contestId || isNaN(parseInt(contestId))) {
+  if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
   const results = await prisma.participant.findMany({
-    where: { contestId: parseInt(contestId) },
+    where: { contestId },
     include: { votes: true },
   });
   return results.map((participant) => ({
