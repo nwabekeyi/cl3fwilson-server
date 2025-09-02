@@ -13,7 +13,8 @@ import {
   getAllContests,
   getParticipantsByContest,
   addAdminVotes,
-  evictParticipant, // Added import for evictParticipant
+  evictParticipant,
+  findParticipantByCodeNameAndContest, // Add new import
 } from '../services/contestService.js';
 import { uploadImage } from '../config/cloudinary.js';
 
@@ -41,6 +42,25 @@ export const getParticipantsByContestHandler = async (req, res) => {
   } catch (error) {
     console.error('Get participants error:', { message: error.message, code: error.code });
     res.status(500).json({ error: error.message || 'Failed to fetch participants' });
+  }
+};
+
+// Get participant by contest ID and codeName handler
+export const getParticipantByCodeNameHandler = async (req, res) => {
+  try {
+    const { contestId, codeName } = req.params;
+    const contest = await findContest(contestId);
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' });
+    }
+    const participant = await findParticipantByCodeNameAndContest(contestId, codeName);
+    if (!participant) {
+      return res.status(404).json({ error: 'Participant not found' });
+    }
+    res.status(200).json(participant);
+  } catch (error) {
+    console.error('Get participant error:', { message: error.message, code: error.code });
+    res.status(500).json({ error: error.message || 'Failed to fetch participant' });
   }
 };
 
@@ -179,7 +199,7 @@ export const deleteParticipantHandler = async (req, res) => {
 
 // Evict participant handler
 export const evictParticipantHandler = async (req, res) => {
-  console.log('called')
+  console.log('called');
   try {
     const { codeName } = req.params;
     const participant = await findParticipant(codeName);
@@ -231,8 +251,7 @@ export const saveVoteHandler = async (req, res) => {
   } catch (error) {
     console.error('Save vote error:', {
       message: error.message,
-      code: error.code,
-      stack: error.stack,
+      code: error.stack,
     });
     if (error.code === 'P2002' && error.message.includes('paymentReference')) {
       return res.status(400).json({ error: 'Duplicate payment reference' });

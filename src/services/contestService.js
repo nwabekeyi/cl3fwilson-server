@@ -1,17 +1,11 @@
 // src/services/contestService.js
-import prisma from '../config/database.js';
+import { Contest, Participant, Vote } from '../model/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteImageByUrl } from '../config/cloudinary.js';
-import { ObjectId } from 'mongodb';
+import mongoose from 'mongoose';
 
 // Validate MongoDB ObjectId
-const isValidObjectId = (id) => {
-  try {
-    return ObjectId.isValid(id) && new ObjectId(id).toString() === id;
-  } catch {
-    return false;
-  }
-};
+const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // Create a new contest
 export const createContest = async (data) => {
@@ -21,20 +15,16 @@ export const createContest = async (data) => {
   if (new Date(data.startDate) >= new Date(data.endDate)) {
     throw new Error('End date must be after start date');
   }
-  return prisma.contest.create({
-    data: {
-      name: data.name,
-      startDate: new Date(data.startDate),
-      endDate: new Date(data.endDate),
-    },
+  return Contest.create({
+    name: data.name,
+    startDate: new Date(data.startDate),
+    endDate: new Date(data.endDate),
   });
 };
 
 // Get all contests
 export const getAllContests = async () => {
-  return prisma.contest.findMany({
-    orderBy: { createdAt: 'desc' },
-  });
+  return Contest.find().sort({ createdAt: -1 });
 };
 
 // Get all participants by contest ID
@@ -42,25 +32,23 @@ export const getParticipantsByContest = async (contestId) => {
   if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
-  return prisma.participant.findMany({
-    where: { contestId }, // contestId is already a string (ObjectId)
-    orderBy: [
-      { evicted: 'asc' }, // Non-evicted (false) first, evicted (true) last
-      { createdAt: 'desc' },
-    ],
-    select: {
-      codeName: true,
-      fullName: true,
-      email: true,
-      about: true,
-      photo: true,
-      contestId: true,
-      evicted: true,
-      createdAt: true,
-      updatedAt: true,
-      votes: true,
-    },
-  });
+  return Participant.find({ contestId })
+    .sort({ evicted: 1, createdAt: -1 })
+    .populate('votes')
+    .select('codeName fullName email about photo contestId evicted votes createdAt updatedAt');
+};
+
+// Find a participant by codeName and contestId
+export const findParticipantByCodeNameAndContest = async (contestId, codeName) => {
+  if (!contestId || !isValidObjectId(contestId)) {
+    throw new Error('Valid contestId is required');
+  }
+  if (!codeName) {
+    throw new Error('codeName is required');
+  }
+  return Participant.findOne({ contestId, codeName })
+    .populate('votes')
+    .select('codeName fullName email about photo contestId evicted votes createdAt updatedAt');
 };
 
 // Create a new participant with a custom codeName
@@ -72,10 +60,7 @@ export const createParticipant = async (contestId, participantData) => {
     throw new Error('fullName, email, and about are required');
   }
 
-  const lastParticipant = await prisma.participant.findFirst({
-    where: { contestId },
-    orderBy: { createdAt: 'desc' },
-  });
+  const lastParticipant = await Participant.findOne({ contestId }).sort({ createdAt: -1 });
 
   let newIdNumber = 1;
   if (lastParticipant && lastParticipant.codeName.startsWith('CW')) {
@@ -86,20 +71,24 @@ export const createParticipant = async (contestId, participantData) => {
   const newCodeName = `CW${String(newIdNumber).padStart(3, '0')}`;
 
   try {
-    return await prisma.participant.create({
-      data: {
-        codeName: newCodeName,
-        contestId, // Store as string (ObjectId)
-        fullName: participantData.fullName,
-        email: participantData.email,
-        about: participantData.about,
-        photo: participantData.photo || null,
-        evicted: false,
-      },
+    return await Participant.create({
+      codeName: newCodeName,
+      contestId,
+      fullName: participantData.fullName,
+      email: participantData.email,
+      about: participantData.about,
+      photo: participantData.photo || null,
+      evicted: false,
+      votes: [],
     });
   } catch (error) {
-    if (error.code === 'P2002') {
-      throw new Error('Email already exists');
+    if (error.code === 11000) {
+      if (error.keyPattern.email) {
+        throw new Error('Email already exists');
+      }
+      if (error.keyPattern.codeName) {
+        throw new Error('CodeName already exists');
+      }
     }
     throw error;
   }
@@ -110,7 +99,7 @@ export const findContest = async (contestId) => {
   if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
-  return prisma.contest.findUnique({ where: { id: contestId } });
+  return Contest.findById(contestId);
 };
 
 // Find a participant by codeName
@@ -118,10 +107,7 @@ export const findParticipant = async (codeName) => {
   if (!codeName) {
     throw new Error('codeName is required');
   }
-  return prisma.participant.findUnique({
-    where: { codeName },
-    include: { votes: true },
-  });
+  return Participant.findOne({ codeName }).populate('votes');
 };
 
 // Update a contest
@@ -132,14 +118,16 @@ export const updateContest = async (contestId, data) => {
   if (data.startDate && data.endDate && new Date(data.startDate) >= new Date(data.endDate)) {
     throw new Error('End date must be after start date');
   }
-  return prisma.contest.update({
-    where: { id: contestId },
-    data: {
+  return Contest.findByIdAndUpdate(
+    contestId,
+    {
       name: data.name || undefined,
       startDate: data.startDate ? new Date(data.startDate) : undefined,
       endDate: data.endDate ? new Date(data.endDate) : undefined,
+      updatedAt: new Date(),
     },
-  });
+    { new: true, runValidators: true }
+  );
 };
 
 // Delete a contest
@@ -149,10 +137,7 @@ export const deleteContest = async (contestId) => {
   }
 
   // Fetch participants with photos to delete from Cloudinary
-  const participants = await prisma.participant.findMany({
-    where: { contestId },
-    select: { photo: true },
-  });
+  const participants = await Participant.find({ contestId }).select('photo');
 
   // Delete images from Cloudinary
   for (const participant of participants) {
@@ -166,11 +151,16 @@ export const deleteContest = async (contestId) => {
   }
 
   // Delete votes, participants, and contest in a transaction
-  await prisma.$transaction([
-    prisma.vote.deleteMany({ where: { contestId } }),
-    prisma.participant.deleteMany({ where: { contestId } }),
-    prisma.contest.delete({ where: { id: contestId } }),
-  ]);
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await Vote.deleteMany({ contestId }).session(session);
+      await Participant.deleteMany({ contestId }).session(session);
+      await Contest.findByIdAndDelete(contestId).session(session);
+    });
+  } finally {
+    session.endSession();
+  }
 };
 
 // Update a participant
@@ -180,10 +170,7 @@ export const updateParticipant = async (codeName, participantData) => {
   }
 
   // Get current participant to check if photo exists
-  const existingParticipant = await prisma.participant.findUnique({
-    where: { codeName },
-    select: { photo: true },
-  });
+  const existingParticipant = await Participant.findOne({ codeName }).select('photo');
 
   if (!existingParticipant) {
     throw new Error('Participant not found');
@@ -205,15 +192,16 @@ export const updateParticipant = async (codeName, participantData) => {
     email: participantData.email || undefined,
     about: participantData.about || undefined,
     photo: participantData.photo || undefined,
+    updatedAt: new Date(),
   };
 
   try {
-    return await prisma.participant.update({
-      where: { codeName },
-      data: dataToUpdate,
+    return await Participant.findOneAndUpdate({ codeName }, dataToUpdate, {
+      new: true,
+      runValidators: true,
     });
   } catch (error) {
-    if (error.code === 'P2002') {
+    if (error.code === 11000 && error.keyPattern.email) {
       throw new Error('Email already exists');
     }
     throw error;
@@ -226,11 +214,8 @@ export const deleteParticipant = async (codeName) => {
     throw new Error('codeName is required');
   }
 
-  // Fetch participant first to get the photo URL
-  const participant = await prisma.participant.findUnique({
-    where: { codeName },
-    select: { photo: true, id: true }, // Include id for vote deletion
-  });
+  // Fetch participant first to get the photo URL and ID
+  const participant = await Participant.findOne({ codeName }).select('_id photo');
 
   if (!participant) {
     throw new Error('Participant not found');
@@ -245,11 +230,16 @@ export const deleteParticipant = async (codeName) => {
     }
   }
 
-  // Delete votes and participant record
-  await prisma.$transaction([
-    prisma.vote.deleteMany({ where: { participantId: participant.id } }),
-    prisma.participant.delete({ where: { codeName } }),
-  ]);
+  // Delete votes and participant record in a transaction
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await Vote.deleteMany({ participantId: participant._id }).session(session);
+      await Participant.deleteOne({ codeName }).session(session);
+    });
+  } finally {
+    session.endSession();
+  }
 };
 
 // Evict a participant
@@ -258,9 +248,7 @@ export const evictParticipant = async (codeName) => {
     throw new Error('codeName is required');
   }
 
-  const participant = await prisma.participant.findUnique({
-    where: { codeName },
-  });
+  const participant = await Participant.findOne({ codeName });
 
   if (!participant) {
     throw new Error('Participant not found');
@@ -270,10 +258,11 @@ export const evictParticipant = async (codeName) => {
     throw new Error('Participant is already evicted');
   }
 
-  return prisma.participant.update({
-    where: { codeName },
-    data: { evicted: true },
-  });
+  return Participant.findOneAndUpdate(
+    { codeName },
+    { evicted: true, updatedAt: new Date() },
+    { new: true }
+  );
 };
 
 // Create votes for a participant
@@ -297,35 +286,51 @@ export const createVotes = async (
     throw new Error('voterName is required');
   }
 
-  // Check if participant is evicted
-  const participant = await prisma.participant.findUnique({
-    where: { codeName: participantCodeName },
-    select: { id: true, evicted: true },
-  });
-
-  if (!participant) {
-    throw new Error('Participant not found');
-  }
-
-  if (participant.evicted) {
-    throw new Error('Cannot vote for an evicted participant');
-  }
-
+  // Start a transaction
+  const session = await mongoose.startSession();
   try {
-    return await prisma.vote.create({
-      data: {
-        contestId,
-        participantId: participant.id, // Use participantId from schema
-        voterName,
-        voteCount,
-        paymentReference: paymentReference || null,
-      },
+    let vote;
+    await session.withTransaction(async () => {
+      // Check if participant is evicted
+      const participant = await Participant.findOne({ codeName: participantCodeName }).select(
+        '_id evicted votes'
+      ).session(session);
+
+      if (!participant) {
+        throw new Error('Participant not found');
+      }
+
+      if (participant.evicted) {
+        throw new Error('Cannot vote for an evicted participant');
+      }
+
+      // Create vote record
+      vote = await Vote.create(
+        [{
+          contestId,
+          participantId: participant._id,
+          voterName,
+          voteCount,
+          paymentReference: paymentReference || null,
+        }],
+        { session }
+      );
+
+      // Add vote ID to participant's votes array
+      await Participant.findOneAndUpdate(
+        { codeName: participantCodeName },
+        { $push: { votes: vote[0]._id }, updatedAt: new Date() },
+        { session }
+      );
     });
+    return vote[0];
   } catch (error) {
-    if (error.code === 'P2002') {
+    if (error.code === 11000 && error.keyPattern.paymentReference) {
       throw new Error('Payment reference already exists');
     }
     throw error;
+  } finally {
+    session.endSession();
   }
 };
 
@@ -370,10 +375,7 @@ export const getContestResults = async (contestId) => {
   if (!contestId || !isValidObjectId(contestId)) {
     throw new Error('Valid contestId is required');
   }
-  const results = await prisma.participant.findMany({
-    where: { contestId },
-    include: { votes: true },
-  });
+  const results = await Participant.find({ contestId }).populate('votes');
   return results.map((participant) => ({
     participantCodeName: participant.codeName,
     name: participant.fullName,

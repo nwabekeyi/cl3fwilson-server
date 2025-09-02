@@ -7,9 +7,10 @@ import cron from 'node-cron';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import connectDB from './config/database.js'
 
 dotenv.config();
-
+connectDB();
 const app = express();
 const port = process.env.PORT || 3000;
 
