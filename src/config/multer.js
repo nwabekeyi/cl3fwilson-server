@@ -5,7 +5,7 @@ import fs from 'fs';
 // Configure Multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadPath = 'uploads/';
+    const uploadPath = 'Uploads/';
 
     // Ensure the uploads directory exists
     if (!fs.existsSync(uploadPath)) {
@@ -20,14 +20,11 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const filetypes = /jpeg|jpg|png/;
-  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = filetypes.test(file.mimetype);
-
-  if (extname && mimetype) {
+  // Allow all image MIME types
+  if (file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
-    cb(new Error('Only JPEG and PNG images are allowed'), false);
+    cb(new Error('Only image files are allowed'), false);
   }
 };
 
