@@ -1,13 +1,13 @@
-// src/index.js
 import express from 'express';
 import dotenv from 'dotenv';
 import contestRoutes from './routes/contestRoutes.js';
 import corsMiddleware from './middlewares/corsMiddleware.js';
+import requestLogger from './middlewares/requestLogger.js'; // Import the new middleware
 import cron from 'node-cron';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import connectDB from './config/database.js'
+import connectDB from './config/database.js';
 
 dotenv.config();
 connectDB();
@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Define the uploads directory path
-const uploadsDir = path.resolve(__dirname, '../uploads');
+const uploadsDir = path.resolve(__dirname, '../Uploads');
 
 // Function to delete contents of uploads directory
 const deleteUploads = async () => {
@@ -48,6 +48,7 @@ cron.schedule('0 0 * * *', () => {
   deleteUploads();
 });
 
+app.use(requestLogger); // Add the request logging middleware
 app.use(corsMiddleware); // Apply CORS middleware
 app.use(express.json());
 
