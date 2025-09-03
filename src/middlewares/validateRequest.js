@@ -59,3 +59,28 @@ export const validateVote = async (req, res, next) => {
     res.status(400).json({ error: error.errors });
   }
 };
+
+// Registration email validation schema
+export const validateRegistrationEmail = async (req, res, next) => {
+  const registrationEmailSchema = z.object({
+    fullName: z.string().optional(),
+    brandName: z.string().optional(),
+    email: z.string().email('Invalid email address').optional(),
+    gender: z.string().optional(),
+    age: z.number().int().min(0, 'Age must be a non-negative integer').optional(),
+    nationality: z.string().optional(),
+    stateOfOrigin: z.string().optional(),
+    location: z.string().optional(),
+    phone: z.string().optional(),
+    whatsapp: z.string().optional(),
+    instagram: z.string().optional(),
+    bio: z.string().optional(),
+  });
+
+  try {
+    await registrationEmailSchema.parseAsync(req.body);
+    next();
+  } catch (error) {
+    res.status(400).json({ error: error.errors });
+  }
+};

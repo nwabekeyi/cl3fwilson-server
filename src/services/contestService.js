@@ -1,8 +1,8 @@
-// src/services/contestService.js
 import { Contest, Participant, Vote } from '../model/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteImageByUrl } from '../config/cloudinary.js';
 import mongoose from 'mongoose';
+import EmailConfig from '../config/email.js'; // Import the email service
 
 // Validate MongoDB ObjectId
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -382,4 +382,33 @@ export const getContestResults = async (contestId) => {
     voteCount: participant.votes.reduce((sum, vote) => sum + vote.voteCount, 0),
     evicted: participant.evicted,
   }));
+};
+
+// Send registration email
+export const sendRegistrationEmail = async (registrationData) => {
+  try {
+    await EmailConfig.sendWithEjsTemplate(
+      'cl3fwilsonfashionafrica@gmail.com',
+      'New Pageant Registration',
+      'registration-email',
+      {
+        fullName: registrationData.fullName || 'N/A',
+        brandName: registrationData.brandName || 'N/A',
+        email: registrationData.email || 'N/A',
+        gender: registrationData.gender || 'N/A',
+        age: registrationData.age || 'N/A',
+        nationality: registrationData.nationality || 'N/A',
+        stateOfOrigin: registrationData.stateOfOrigin || 'N/A',
+        location: registrationData.location || 'N/A',
+        phone: registrationData.phone || 'N/A',
+        whatsapp: registrationData.whatsapp || 'N/A',
+        instagram: registrationData.instagram || 'N/A',
+        bio: registrationData.bio || 'N/A',
+      }
+    );
+    return { message: 'Email sent successfully' };
+  } catch (error) {
+    console.error('Failed to send registration email:', error.message);
+    throw new Error('Failed to send registration email');
+  }
 };

@@ -1,4 +1,3 @@
-// src/routes/contestRoutes.js
 import { Router } from 'express';
 import {
   createContestHandler,
@@ -13,9 +12,10 @@ import {
   addAdminVotesHandler,
   saveVoteHandler,
   evictParticipantHandler,
-  getParticipantByCodeNameHandler, // Add new handler
+  getParticipantByCodeNameHandler,
+  sendRegistrationEmailHandler, // Add new handler
 } from '../controllers/contestController.js';
-import { validateContest, validateParticipant, validateVote } from '../middlewares/validateRequest.js';
+import { validateContest, validateParticipant, validateVote, validateRegistrationEmail } from '../middlewares/validateRequest.js'; // Add new validation
 import { upload } from '../config/multer.js';
 
 const router = Router();
@@ -26,7 +26,7 @@ router.put('/contests/:contestId', validateContest, updateContestHandler);
 router.delete('/contests/:contestId', deleteContestHandler);
 
 router.get('/contests/:contestId/participants', getParticipantsByContestHandler);
-router.get('/contests/:contestId/participants/:codeName', getParticipantByCodeNameHandler); // New route
+router.get('/contests/:contestId/participants/:codeName', getParticipantByCodeNameHandler);
 router.post(
   '/contests/:contestId/participants',
   upload.single('photo'),
@@ -46,5 +46,8 @@ router.post('/contests/:contestId/votes', validateVote, saveVoteHandler);
 router.post('/contests/:contestId/participants/:participantCodeName/votes', addAdminVotesHandler);
 
 router.get('/contests/:contestId/results', getResultsHandler);
+
+// New route for sending registration email
+router.post('/contests/send-registration-email', validateRegistrationEmail, sendRegistrationEmailHandler);
 
 export default router;

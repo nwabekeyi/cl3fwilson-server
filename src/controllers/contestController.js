@@ -1,4 +1,3 @@
-// src/controllers/contestController.js
 import {
   createContest,
   createParticipant,
@@ -14,7 +13,8 @@ import {
   getParticipantsByContest,
   addAdminVotes,
   evictParticipant,
-  findParticipantByCodeNameAndContest, // Add new import
+  findParticipantByCodeNameAndContest,
+  sendRegistrationEmail, // Add new import
 } from '../services/contestService.js';
 import { uploadImage } from '../config/cloudinary.js';
 
@@ -215,8 +215,6 @@ export const evictParticipantHandler = async (req, res) => {
 };
 
 // Save vote handler
-// WARNING: No Paystack verification is performed. Ensure frontend payment is secure.
-// Use unique paymentReference to prevent duplicate votes.
 export const saveVoteHandler = async (req, res) => {
   try {
     const { contestId } = req.params;
@@ -286,5 +284,45 @@ export const addAdminVotesHandler = async (req, res) => {
   } catch (error) {
     console.error('Add admin votes error:', { message: error.message, code: error.code });
     res.status(500).json({ error: error.message || 'Failed to add votes' });
+  }
+};
+
+// Send registration email handler
+export const sendRegistrationEmailHandler = async (req, res) => {
+  try {
+    const {
+      fullName,
+      brandName,
+      email,
+      gender,
+      age,
+      nationality,
+      stateOfOrigin,
+      location,
+      phone,
+      whatsapp,
+      instagram,
+      bio,
+    } = req.body;
+
+    const result = await sendRegistrationEmail({
+      fullName,
+      brandName,
+      email,
+      gender,
+      age,
+      nationality,
+      stateOfOrigin,
+      location,
+      phone,
+      whatsapp,
+      instagram,
+      bio,
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Send registration email error:', { message: error.message, code: error.code });
+    res.status(500).json({ error: error.message || 'Failed to send registration email' });
   }
 };
