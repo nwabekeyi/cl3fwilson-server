@@ -218,6 +218,7 @@ export const evictParticipantHandler = async (req, res) => {
 export const saveVoteHandler = async (req, res) => {
   try {
     const { contestId } = req.params;
+    console.log(contestId)
     const { participantCodeName, voteCount, email, voterName, paymentReference } = req.body;
 
     console.log('Saving vote:', { contestId, participantCodeName, voteCount, email, voterName, paymentReference });
@@ -237,7 +238,7 @@ export const saveVoteHandler = async (req, res) => {
     // Save vote without Paystack verification
     console.log('Creating vote in database');
     const vote = await createVotes(
-      parseInt(contestId),
+      contestId,
       participantCodeName,
       voteCount,
       voterName,
