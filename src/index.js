@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import connectDB from './config/database.js';
+import deleteImage from './routes/deleteImage.js'
 
 dotenv.config();
 connectDB();
@@ -53,6 +54,8 @@ app.use(corsMiddleware); // Apply CORS middleware
 app.use(express.json());
 
 app.use('/', contestRoutes);
+app.use('/', deleteImage);
+
 
 // Catch-all route for undefined endpoints
 app.all('*', (req, res) => {
