@@ -31,13 +31,10 @@ const deleteUploads = async () => {
       const stats = await fs.stat(filePath);
       if (stats.isFile()) {
         await fs.unlink(filePath);
-        console.log(`Deleted file: ${filePath}`);
       } else if (stats.isDirectory()) {
         await fs.rm(filePath, { recursive: true, force: true });
-        console.log(`Deleted directory: ${filePath}`);
       }
     }
-    console.log('Uploads directory cleared successfully.');
   } catch (err) {
     console.error('Error clearing uploads directory:', err);
   }
@@ -45,7 +42,6 @@ const deleteUploads = async () => {
 
 // Schedule deletion every 24 hours at midnight
 cron.schedule('0 0 * * *', () => {
-  console.log('Running scheduled task to clear uploads directory...');
   deleteUploads();
 });
 

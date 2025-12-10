@@ -1,5 +1,4 @@
-// controllers/cloudinary.controller.js
-import { deleteImage, deleteImageByUrl } from "../config/cloudinary";
+import { deleteImage, deleteImageByUrl } from "../config/cloudinary.js";
 
 export const deleteImageController = async (req, res) => {
   try {
