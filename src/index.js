@@ -9,6 +9,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import connectDB from './config/database.js';
 import deleteImage from './routes/deleteImage.js'
+import heartbeatRouter from './routes/heartBeat.js';
+import { startHeartbeat } from './services/heartBeat.js';
 
 dotenv.config();
 connectDB();
@@ -51,6 +53,10 @@ app.use(express.json());
 
 app.use('/', contestRoutes);
 app.use('/', deleteImage);
+app.use('/', heartbeatRouter);
+
+// Start heartbeat task
+startHeartbeat();
 
 
 // Catch-all route for undefined endpoints
