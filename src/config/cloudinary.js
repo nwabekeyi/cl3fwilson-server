@@ -55,14 +55,33 @@ export const deleteImage = async (publicId) => {
 export const deleteImageByUrl = async (imageUrl) => {
   try {
     const parsedUrl = url.parse(imageUrl);
-    const publicIdWithExtension = path.basename(parsedUrl.pathname);
-    const folder = path.dirname(parsedUrl.pathname).split('/').pop(); // extract last folder name
+    const pathname = parsedUrl.pathname; // e.g., /diym28aqy/image/upload/f_auto,q_auto/v1765376096/ecv37d2wnaxokwubcfom.jpg
 
-    // Remove the file extension
-    const publicId = `${folder}/${publicIdWithExtension.replace(path.extname(publicIdWithExtension), '')}`;
+    const uploadIndex = pathname.indexOf("/upload/");
+    if (uploadIndex === -1) throw new Error("Invalid Cloudinary URL");
 
-    await cloudinary.uploader.destroy(publicId);
+    // Everything after /upload/
+    let afterUpload = pathname.substring(uploadIndex + 8); // skip "/upload/"
+
+    // Strip transformation params and version number
+    // Format: [transformations]/v1234567890/public_id.extension
+    const parts = afterUpload.split("/"); // e.g., ["f_auto,q_auto", "v1765376096", "ecv37d2wnaxokwubcfom.jpg"]
+
+    const publicIdWithExt = parts[parts.length - 1]; // ecv37d2wnaxokwubcfom.jpg
+    const publicId = publicIdWithExt.replace(path.extname(publicIdWithExt), ""); // remove .jpg
+
+    const result = await cloudinary.uploader.destroy(publicId);
+    if (result.result === "not found") {
+      console.warn(`Image not found in Cloudinary: ${publicId}`);
+    } else if (result.result === "ok") {
+      console.log(`Successfully deleted image: ${publicId}`);
+    } else {
+      console.warn(`Unexpected Cloudinary delete result for ${publicId}:`, result);
+    }
+
+    return result;
   } catch (error) {
-    console.error(`Failed to delete image from URL: ${error.message}`);
+    console.error(`Failed to delete image from URL: ${imageUrl}`, error);
+    throw error;
   }
 };
